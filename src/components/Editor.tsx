@@ -180,18 +180,27 @@ export const Editor = memo(function Editor({
     const tab = tabs.find(t => t.entry.path === activeTabPath)
     if (!tab) return
 
-    if (cache.has(activeTabPath)) {
-      // Instant switch — use cached blocks
-      editor.replaceBlocks(editor.document, cache.get(activeTabPath)!)
-    } else {
-      // First open — parse markdown
-      const [, body] = splitFrontmatter(tab.content)
-      const preprocessed = preProcessWikilinks(body)
-      editor.tryParseMarkdownToBlocks(preprocessed).then(blocks => {
-        const withWikilinks = injectWikilinks(blocks)
-        editor.replaceBlocks(editor.document, withWikilinks)
-        cache.set(activeTabPath, withWikilinks)
-      })
+    try {
+      if (cache.has(activeTabPath)) {
+        // Instant switch — use cached blocks
+        editor.replaceBlocks(editor.document, cache.get(activeTabPath)!)
+      } else {
+        // First open — parse markdown
+        const [, body] = splitFrontmatter(tab.content)
+        const preprocessed = preProcessWikilinks(body)
+        editor.tryParseMarkdownToBlocks(preprocessed).then(blocks => {
+          const withWikilinks = injectWikilinks(blocks)
+          try {
+            editor.replaceBlocks(editor.document, withWikilinks)
+          } catch (err) {
+            console.error('Failed to replace blocks:', err)
+            return
+          }
+          cache.set(activeTabPath, withWikilinks)
+        })
+      }
+    } catch (err) {
+      console.error('Failed to swap editor content:', err)
     }
   }, [activeTabPath, tabs, editor])
 

@@ -111,10 +111,7 @@ export function useNoteActions(
       return
     }
 
-    // Set active immediately for instant visual feedback
-    setActiveTabPath(entry.path)
-
-    // Load content async
+    // Load content async, then add tab and set active together
     try {
       const content = isTauri()
         ? await invoke<string>('get_note_content', { path: entry.path })
@@ -123,12 +120,14 @@ export function useNoteActions(
         if (prev.some((t) => t.entry.path === entry.path)) return prev
         return [...prev, { entry, content }]
       })
+      setActiveTabPath(entry.path)
     } catch (err) {
       console.warn('Failed to load note content:', err)
       setTabs((prev) => {
         if (prev.some((t) => t.entry.path === entry.path)) return prev
         return [...prev, { entry, content: '' }]
       })
+      setActiveTabPath(entry.path)
     }
   }, [])
 
