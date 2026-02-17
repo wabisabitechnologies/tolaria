@@ -31,6 +31,9 @@ pub struct VaultEntry {
     #[serde(rename = "fileSize")]
     pub file_size: u64,
     pub snippet: String,
+    /// Generic relationship fields: any frontmatter key whose value contains wikilinks.
+    /// Key is the original frontmatter field name (e.g. "Has", "Topics", "Events").
+    pub relationships: HashMap<String, Vec<String>>,
 }
 
 /// Intermediate struct to capture YAML frontmatter fields.
@@ -182,6 +185,54 @@ fn parse_frontmatter(data: &HashMap<String, serde_json::Value>) -> Frontmatter {
     serde_json::from_value(value).unwrap_or_default()
 }
 
+/// Known non-relationship frontmatter keys to skip (case-insensitive comparison).
+/// Only skip keys that can never contain wikilinks.
+const SKIP_KEYS: &[&str] = &[
+    "is a", "aliases", "status", "cadence", "created at", "created time",
+];
+
+/// Check if a string contains a wikilink pattern `[[...]]`.
+fn contains_wikilink(s: &str) -> bool {
+    s.contains("[[") && s.contains("]]")
+}
+
+/// Extract all wikilink-containing fields from raw YAML frontmatter.
+/// Returns a HashMap where each key is the original frontmatter field name
+/// and the value is a Vec of wikilink strings found in that field.
+/// Handles both single string values and arrays of strings.
+fn extract_relationships(data: &HashMap<String, serde_json::Value>) -> HashMap<String, Vec<String>> {
+    let mut relationships = HashMap::new();
+
+    for (key, value) in data {
+        // Skip known non-relationship keys
+        if SKIP_KEYS.iter().any(|k| k.eq_ignore_ascii_case(key)) {
+            continue;
+        }
+
+        match value {
+            serde_json::Value::String(s) => {
+                if contains_wikilink(s) {
+                    relationships.insert(key.clone(), vec![s.clone()]);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                let wikilinks: Vec<String> = arr
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .filter(|s| contains_wikilink(s))
+                    .map(|s| s.to_string())
+                    .collect();
+                if !wikilinks.is_empty() {
+                    relationships.insert(key.clone(), wikilinks);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    relationships
+}
+
 /// Parse a single markdown file into a VaultEntry.
 pub fn parse_md_file(path: &Path) -> Result<VaultEntry, String> {
     let content = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
@@ -194,7 +245,7 @@ pub fn parse_md_file(path: &Path) -> Result<VaultEntry, String> {
     let matter = Matter::<YAML>::new();
     let parsed = matter.parse(&content);
 
-    let frontmatter: Frontmatter = if let Some(data) = parsed.data {
+    let (frontmatter, relationships): (Frontmatter, HashMap<String, Vec<String>>) = if let Some(data) = parsed.data {
         match data {
             gray_matter::Pod::Hash(map) => {
                 // Convert Pod HashMap to serde_json HashMap
@@ -202,12 +253,14 @@ pub fn parse_md_file(path: &Path) -> Result<VaultEntry, String> {
                     .into_iter()
                     .map(|(k, v)| (k, pod_to_json(v)))
                     .collect();
-                parse_frontmatter(&json_map)
+                let fm = parse_frontmatter(&json_map);
+                let rels = extract_relationships(&json_map);
+                (fm, rels)
             }
-            _ => Frontmatter::default(),
+            _ => (Frontmatter::default(), HashMap::new()),
         }
     } else {
-        Frontmatter::default()
+        (Frontmatter::default(), HashMap::new())
     };
 
     let title = extract_title(&parsed.content, &filename);
@@ -273,6 +326,7 @@ pub fn parse_md_file(path: &Path) -> Result<VaultEntry, String> {
         created_at,
         file_size,
         snippet,
+        relationships,
     })
 }
 
@@ -829,6 +883,83 @@ This is a project note.
         let entries2 = scan_vault_cached(vault.to_str().unwrap()).unwrap();
         assert_eq!(entries2.len(), 1);
         assert_eq!(entries2[0].title, "Note");
+    }
+
+    #[test]
+    fn test_parse_relationships_array() {
+        let dir = TempDir::new().unwrap();
+        let content = r#"---
+Is A: Responsibility
+Has:
+  - "[[essay/foo|Foo Essay]]"
+  - "[[essay/bar|Bar Essay]]"
+Topics:
+  - "[[topic/rust]]"
+  - "[[topic/wasm]]"
+Status: Active
+---
+# Publish Essays
+"#;
+        create_test_file(dir.path(), "publish-essays.md", content);
+
+        let entry = parse_md_file(&dir.path().join("publish-essays.md")).unwrap();
+        assert_eq!(entry.relationships.len(), 2);
+        assert_eq!(
+            entry.relationships.get("Has").unwrap(),
+            &vec!["[[essay/foo|Foo Essay]]".to_string(), "[[essay/bar|Bar Essay]]".to_string()]
+        );
+        assert_eq!(
+            entry.relationships.get("Topics").unwrap(),
+            &vec!["[[topic/rust]]".to_string(), "[[topic/wasm]]".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_parse_relationships_single_string() {
+        let dir = TempDir::new().unwrap();
+        let content = r#"---
+Is A: Project
+Owner: "[[person/luca-rossi|Luca Rossi]]"
+Belongs to:
+  - "[[responsibility/grow-newsletter]]"
+---
+# Some Project
+"#;
+        create_test_file(dir.path(), "some-project.md", content);
+
+        let entry = parse_md_file(&dir.path().join("some-project.md")).unwrap();
+        // Owner contains a wikilink, so it should appear in relationships
+        assert_eq!(
+            entry.relationships.get("Owner").unwrap(),
+            &vec!["[[person/luca-rossi|Luca Rossi]]".to_string()]
+        );
+        // Belongs to is also a wikilink array, should appear in relationships
+        assert_eq!(
+            entry.relationships.get("Belongs to").unwrap(),
+            &vec!["[[responsibility/grow-newsletter]]".to_string()]
+        );
+        // Still parsed in the dedicated field too
+        assert_eq!(entry.belongs_to, vec!["[[responsibility/grow-newsletter]]"]);
+    }
+
+    #[test]
+    fn test_parse_relationships_ignores_non_wikilinks() {
+        let dir = TempDir::new().unwrap();
+        let content = r#"---
+Is A: Note
+Status: Active
+Tags:
+  - productivity
+  - writing
+Custom Field: just a plain string
+---
+# A Note
+"#;
+        create_test_file(dir.path(), "plain-note.md", content);
+
+        let entry = parse_md_file(&dir.path().join("plain-note.md")).unwrap();
+        // Tags and Custom Field don't contain wikilinks, so relationships should be empty
+        assert!(entry.relationships.is_empty());
     }
 
     // Frontmatter update/delete tests are in frontmatter.rs
