@@ -3,8 +3,26 @@ import { Virtuoso } from 'react-virtuoso'
 import type { VaultEntry, SidebarSelection, ModifiedFile } from '../types'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
-import { MagnifyingGlass, Plus } from '@phosphor-icons/react'
+import {
+  MagnifyingGlass, Plus, Wrench, Flask, Target, ArrowsClockwise,
+  Users, CalendarBlank, Tag, FileText,
+} from '@phosphor-icons/react'
+import type { ComponentType, SVGAttributes } from 'react'
 import { getTypeColor, getTypeLightColor } from '../utils/typeColors'
+
+const TYPE_ICON_MAP: Record<string, ComponentType<SVGAttributes<SVGSVGElement>>> = {
+  Project: Wrench,
+  Experiment: Flask,
+  Responsibility: Target,
+  Procedure: ArrowsClockwise,
+  Person: Users,
+  Event: CalendarBlank,
+  Topic: Tag,
+}
+
+function getTypeIcon(isA: string | null): ComponentType<SVGAttributes<SVGSVGElement>> {
+  return (isA && TYPE_ICON_MAP[isA]) || FileText
+}
 
 interface NoteListProps {
   entries: VaultEntry[]
@@ -182,11 +200,12 @@ function NoteListInner({ entries, selection, selectedNote, modifiedFiles, onSele
     const isSelected = selectedNote?.path === entry.path && !isPinned
     const typeColor = getTypeColor(entry.isA)
     const typeLightColor = getTypeLightColor(entry.isA)
+    const TypeIcon = getTypeIcon(entry.isA)
     return (
       <div
         key={entry.path}
         className={cn(
-          "cursor-pointer border-b border-[var(--border)] transition-colors",
+          "relative cursor-pointer border-b border-[var(--border)] transition-colors",
           isPinned && "border-l-[3px] border-l-[var(--accent-green)] bg-muted",
           isSelected && "border-l-[3px]",
           !isPinned && !isSelected && "hover:bg-muted"
@@ -200,7 +219,14 @@ function NoteListInner({ entries, selection, selectedNote, modifiedFiles, onSele
         }}
         onClick={() => onSelectNote(entry)}
       >
-        <div className="flex items-baseline justify-between gap-2">
+        <TypeIcon
+          width={14}
+          height={14}
+          className="absolute right-3 top-2.5"
+          style={{ color: typeColor }}
+          data-testid="type-icon"
+        />
+        <div className="flex items-baseline justify-between gap-2 pr-5">
           <div className={cn(
             "min-w-0 flex-1 truncate text-[13px] text-foreground",
             isSelected ? "font-semibold" : "font-medium"
