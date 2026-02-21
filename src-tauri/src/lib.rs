@@ -63,6 +63,11 @@ fn save_image(vault_path: String, filename: String, data: String) -> Result<Stri
     vault::save_image(&vault_path, &filename, &data)
 }
 
+#[tauri::command]
+fn purge_trash(vault_path: String) -> Result<Vec<String>, String> {
+    vault::purge_trash(&vault_path)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -74,6 +79,23 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Purge trashed files older than 30 days on startup
+            let vault_path = dirs::home_dir()
+                .map(|h| h.join("Laputa"))
+                .unwrap_or_default();
+            if vault_path.is_dir() {
+                match vault::purge_trash(vault_path.to_str().unwrap_or_default()) {
+                    Ok(deleted) if !deleted.is_empty() => {
+                        log::info!("Purged {} trashed files on startup", deleted.len());
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to purge trash on startup: {}", e);
+                    }
+                    _ => {}
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -87,7 +109,8 @@ pub fn run() {
             git_commit,
             git_push,
             ai_chat,
-            save_image
+            save_image,
+            purge_trash
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
