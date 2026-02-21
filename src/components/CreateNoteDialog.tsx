@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-const NOTE_TYPES = [
+const BUILT_IN_TYPES = [
   'Note',
   'Project',
   'Experiment',
@@ -15,18 +15,20 @@ const NOTE_TYPES = [
   'Topic',
 ] as const
 
-export type NoteType = (typeof NOTE_TYPES)[number]
+export type NoteType = (typeof BUILT_IN_TYPES)[number]
 
 interface CreateNoteDialogProps {
   open: boolean
   onClose: () => void
-  onCreate: (title: string, type: NoteType) => void
-  defaultType?: NoteType
+  onCreate: (title: string, type: string) => void
+  defaultType?: string
+  /** Custom types from the vault (Type documents not in built-in list) */
+  customTypes?: string[]
 }
 
-export function CreateNoteDialog({ open, onClose, onCreate, defaultType }: CreateNoteDialogProps) {
+export function CreateNoteDialog({ open, onClose, onCreate, defaultType, customTypes = [] }: CreateNoteDialogProps) {
   const [title, setTitle] = useState('')
-  const [type, setType] = useState<NoteType>('Note')
+  const [type, setType] = useState<string>('Note')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function CreateNoteDialog({ open, onClose, onCreate, defaultType }: Creat
               Type
             </label>
             <div className="flex flex-wrap gap-1.5">
-              {NOTE_TYPES.map((t) => (
+              {BUILT_IN_TYPES.map((t) => (
                 <Button
                   key={t}
                   type="button"
@@ -77,6 +79,23 @@ export function CreateNoteDialog({ open, onClose, onCreate, defaultType }: Creat
                   className={cn(
                     "rounded-full text-xs",
                     type === t && "bg-primary text-primary-foreground"
+                  )}
+                  onClick={() => setType(t)}
+                >
+                  {t}
+                </Button>
+              ))}
+              {customTypes.map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  variant={type === t ? 'default' : 'outline'}
+                  size="sm"
+                  className={cn(
+                    "rounded-full text-xs",
+                    type === t
+                      ? "bg-[var(--accent-blue)] text-white"
+                      : "border-[var(--accent-blue)] text-[var(--accent-blue)]"
                   )}
                   onClick={() => setType(t)}
                 >

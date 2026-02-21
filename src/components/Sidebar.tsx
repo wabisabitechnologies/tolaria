@@ -1,4 +1,4 @@
-import { useState, memo, type ComponentType } from 'react'
+import { useState, useMemo, memo, type ComponentType } from 'react'
 import type { VaultEntry, SidebarSelection } from '../types'
 import { cn } from '@/lib/utils'
 import { ChevronRight, ChevronDown, GitCommitHorizontal, Plus } from 'lucide-react'
@@ -25,6 +25,7 @@ interface SidebarProps {
   onSelect: (selection: SidebarSelection) => void
   onSelectNote?: (entry: VaultEntry) => void
   onCreateType?: (type: string) => void
+  onCreateNewType?: () => void
   modifiedCount?: number
   onCommitPush?: () => void
 }
@@ -34,7 +35,13 @@ const TOP_NAV = [
   { label: 'Favorites', filter: 'favorites' as const, Icon: Star },
 ]
 
-const SECTION_GROUPS: { label: string; type: string; Icon: ComponentType<IconProps> }[] = [
+interface SectionGroup {
+  label: string
+  type: string
+  Icon: ComponentType<IconProps>
+}
+
+const BUILT_IN_SECTION_GROUPS: SectionGroup[] = [
   { label: 'Projects', type: 'Project', Icon: Wrench },
   { label: 'Experiments', type: 'Experiment', Icon: Flask },
   { label: 'Responsibilities', type: 'Responsibility', Icon: Target },
@@ -45,7 +52,9 @@ const SECTION_GROUPS: { label: string; type: string; Icon: ComponentType<IconPro
   { label: 'Types', type: 'Type', Icon: StackSimple },
 ]
 
-export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onSelectNote, onCreateType, modifiedCount = 0, onCommitPush }: SidebarProps) {
+const BUILT_IN_TYPES = new Set(BUILT_IN_SECTION_GROUPS.map((s) => s.type))
+
+export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onSelectNote, onCreateType, onCreateNewType, modifiedCount = 0, onCommitPush }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const toggleSection = (type: string) => {
     setCollapsed((prev) => ({ ...prev, [type]: !prev[type] }))
@@ -60,6 +69,113 @@ export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onS
     if (sel.kind === 'entity' && selection.kind === 'entity') return sel.entry.path === selection.entry.path
     if (sel.kind === 'topic' && selection.kind === 'topic') return sel.entry.path === selection.entry.path
     return false
+  }
+
+  // Derive custom type sections from Type entries not in the built-in list
+  const customSectionGroups: SectionGroup[] = useMemo(() => {
+    return entries
+      .filter((e) => e.isA === 'Type' && !BUILT_IN_TYPES.has(e.title))
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((e) => ({
+        label: e.title + 's',
+        type: e.title,
+        Icon: FileText,
+      }))
+  }, [entries])
+
+  const allSectionGroups = useMemo(
+    () => [...BUILT_IN_SECTION_GROUPS, ...customSectionGroups],
+    [customSectionGroups],
+  )
+
+  const renderSection = ({ label, type, Icon }: SectionGroup) => {
+    const items = entries.filter((e) => e.isA === type)
+    const isCollapsed = collapsed[type] ?? false
+    const isTopic = type === 'Topic'
+    const isTypeSection = type === 'Type'
+
+    const handlePlusClick = (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (isTypeSection) {
+        onCreateNewType?.()
+      } else {
+        onCreateType?.(type)
+      }
+    }
+
+    return (
+      <div key={type} style={{ padding: '4px 6px' }}>
+        {/* Section header row */}
+        <div
+          className={cn(
+            "group/section flex cursor-pointer select-none items-center justify-between rounded transition-colors",
+            isActive({ kind: 'sectionGroup', type })
+              ? "bg-secondary"
+              : "hover:bg-accent"
+          )}
+          style={{ padding: '6px 16px', borderRadius: 4, gap: 8 }}
+          onClick={() => onSelect({ kind: 'sectionGroup', type })}
+        >
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <Icon size={16} style={{ color: getTypeColor(type) }} />
+            <span className="text-[13px] font-medium text-foreground">{label}</span>
+          </div>
+          <div className="flex items-center" style={{ gap: 2 }}>
+            {(onCreateType || (isTypeSection && onCreateNewType)) && (
+              <button
+                className="flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/section:opacity-100 cursor-pointer"
+                style={{ width: 20, height: 20 }}
+                onClick={handlePlusClick}
+                aria-label={isTypeSection ? 'Create new Type' : `Create new ${type}`}
+                title={isTypeSection ? 'New Type' : `New ${type}`}
+              >
+                <Plus size={14} />
+              </button>
+            )}
+            <button
+              className="flex shrink-0 items-center border-none bg-transparent p-0 text-inherit cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleSection(type)
+              }}
+              aria-label={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
+            >
+              {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Children items */}
+        {!isCollapsed && items.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {items.map((entry) => (
+              <div
+                key={entry.path}
+                className={cn(
+                  "cursor-pointer truncate rounded-md text-[13px] font-normal transition-colors",
+                  isActive(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry })
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:bg-accent"
+                )}
+                style={{
+                  padding: '4px 16px 4px 28px',
+                  ...(isActive(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry }) && {
+                    backgroundColor: getTypeLightColor(entry.isA ?? ''),
+                    color: getSectionColor(entry),
+                  }),
+                }}
+                onClick={() => {
+                  onSelect(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry })
+                  onSelectNote?.(entry)
+                }}
+              >
+                {entry.title}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -116,91 +232,8 @@ export const Sidebar = memo(function Sidebar({ entries, selection, onSelect, onS
           </div>
         </div>
 
-        {/* Section Groups */}
-        {SECTION_GROUPS.map(({ label, type, Icon }) => {
-          const items = type === 'Topic'
-            ? entries.filter((e) => e.isA === 'Topic')
-            : entries.filter((e) => e.isA === type)
-          const isCollapsed = collapsed[type] ?? false
-          const isTopic = type === 'Topic'
-
-          return (
-            <div key={type} style={{ padding: '4px 6px' }}>
-              {/* Section header row */}
-              <div
-                className={cn(
-                  "group/section flex cursor-pointer select-none items-center justify-between rounded transition-colors",
-                  isActive({ kind: 'sectionGroup', type })
-                    ? "bg-secondary"
-                    : "hover:bg-accent"
-                )}
-                style={{ padding: '6px 16px', borderRadius: 4, gap: 8 }}
-                onClick={() => onSelect({ kind: 'sectionGroup', type })}
-              >
-                <div className="flex items-center" style={{ gap: 8 }}>
-                  <Icon size={16} style={{ color: getTypeColor(type) }} />
-                  <span className="text-[13px] font-medium text-foreground">{label}</span>
-                </div>
-                <div className="flex items-center" style={{ gap: 2 }}>
-                  {onCreateType && (
-                    <button
-                      className="flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/section:opacity-100 cursor-pointer"
-                      style={{ width: 20, height: 20 }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onCreateType(type)
-                      }}
-                      aria-label={`Create new ${type}`}
-                      title={`New ${type}`}
-                    >
-                      <Plus size={14} />
-                    </button>
-                  )}
-                  <button
-                    className="flex shrink-0 items-center border-none bg-transparent p-0 text-inherit cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleSection(type)
-                    }}
-                    aria-label={isCollapsed ? `Expand ${label}` : `Collapse ${label}`}
-                  >
-                    {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Children items */}
-              {!isCollapsed && items.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {items.map((entry) => (
-                    <div
-                      key={entry.path}
-                      className={cn(
-                        "cursor-pointer truncate rounded-md text-[13px] font-normal transition-colors",
-                        isActive(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry })
-                          ? "text-foreground"
-                          : "text-muted-foreground hover:bg-accent"
-                      )}
-                      style={{
-                        padding: '4px 16px 4px 28px',
-                        ...(isActive(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry }) && {
-                          backgroundColor: getTypeLightColor(entry.isA ?? ''),
-                          color: getSectionColor(entry),
-                        }),
-                      }}
-                      onClick={() => {
-                        onSelect(isTopic ? { kind: 'topic', entry } : { kind: 'entity', entry })
-                        onSelectNote?.(entry)
-                      }}
-                    >
-                      {entry.title}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {/* Section Groups (built-in + custom) */}
+        {allSectionGroups.map(renderSection)}
       </nav>
 
       {/* Commit button — always visible */}

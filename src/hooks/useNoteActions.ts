@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { isTauri, mockInvoke, addMockEntry, updateMockContent } from '../mock-tauri'
 import type { VaultEntry } from '../types'
 import type { FrontmatterValue } from '../components/Inspector'
-import type { NoteType } from '../components/CreateNoteDialog'
 
 interface Tab {
   entry: VaultEntry
@@ -173,21 +172,23 @@ export function useNoteActions(
     }
   }, [entries, handleSelectNote])
 
-  const handleCreateNote = useCallback(async (title: string, type: NoteType) => {
+  const handleCreateNote = useCallback(async (title: string, type: string) => {
     const typeToFolder: Record<string, string> = {
       Note: 'note', Project: 'project', Experiment: 'experiment',
       Responsibility: 'responsibility', Procedure: 'procedure',
       Person: 'person', Event: 'event', Topic: 'topic',
     }
-    const folder = typeToFolder[type] || 'note'
+    // Custom types use lowercased type name as folder
+    const folder = typeToFolder[type] || type.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const path = `/Users/luca/Laputa/${folder}/${slug}.md`
     const now = Math.floor(Date.now() / 1000)
 
+    const noStatusTypes = new Set(['Topic', 'Person'])
     const newEntry: VaultEntry = {
       path, filename: `${slug}.md`, title, isA: type,
       aliases: [], belongsTo: [], relatedTo: [],
-      status: type === 'Topic' || type === 'Person' ? null : 'Active',
+      status: noStatusTypes.has(type) ? null : 'Active',
       owner: null, cadence: null, modifiedAt: now, createdAt: now, fileSize: 0,
       snippet: '', relationships: {},
     }
@@ -198,6 +199,29 @@ export function useNoteActions(
       '---',
     ].join('\n')
     const content = `${frontmatter}\n\n# ${title}\n\n`
+
+    if (!isTauri()) {
+      addMockEntry(newEntry, content)
+    }
+
+    addEntry(newEntry, content)
+    handleSelectNote(newEntry)
+  }, [handleSelectNote, addEntry])
+
+  const handleCreateType = useCallback(async (typeName: string) => {
+    const slug = typeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const path = `/Users/luca/Laputa/type/${slug}.md`
+    const now = Math.floor(Date.now() / 1000)
+
+    const newEntry: VaultEntry = {
+      path, filename: `${slug}.md`, title: typeName, isA: 'Type',
+      aliases: [], belongsTo: [], relatedTo: [],
+      status: null, owner: null, cadence: null,
+      modifiedAt: now, createdAt: now, fileSize: 0,
+      snippet: '', relationships: {},
+    }
+
+    const content = `---\nIs A: Type\n---\n\n# ${typeName}\n\n`
 
     if (!isTauri()) {
       addMockEntry(newEntry, content)
@@ -272,6 +296,7 @@ export function useNoteActions(
     handleSwitchTab,
     handleNavigateWikilink,
     handleCreateNote,
+    handleCreateType,
     handleUpdateFrontmatter,
     handleDeleteProperty,
     handleAddProperty,

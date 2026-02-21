@@ -549,6 +549,65 @@ A **general-purpose document** — research notes, meeting notes, strategy docs.
 ## Properties
 - **Belongs to**: A Project, Responsibility, or other parent
 `,
+  // --- Custom type documents (user-created types) ---
+  '/Users/luca/Laputa/type/recipe.md': `---
+Is A: Type
+---
+
+# Recipe
+
+A **recipe** for cooking or baking. Recipes have ingredients, steps, and serving info.
+
+## Default Properties
+- **Servings**: Number of servings
+- **Prep Time**: Time to prepare
+- **Cook Time**: Time to cook
+`,
+  '/Users/luca/Laputa/type/book.md': `---
+Is A: Type
+---
+
+# Book
+
+A **book** you're reading or have read. Track reading progress, notes, and key takeaways.
+
+## Default Properties
+- **Author**: The book's author
+- **Status**: Reading, Finished, Abandoned
+- **Rating**: 1-5 stars
+`,
+  // --- Instances of custom types ---
+  '/Users/luca/Laputa/recipe/pasta-carbonara.md': `---
+title: Pasta Carbonara
+is_a: Recipe
+servings: 4
+prep_time: 10 min
+cook_time: 20 min
+---
+
+# Pasta Carbonara
+
+Classic Roman pasta dish with eggs, pecorino, guanciale, and black pepper.
+
+## Ingredients
+- 400g spaghetti
+- 200g guanciale
+- 4 egg yolks + 2 whole eggs
+- 100g Pecorino Romano
+- Black pepper
+`,
+  '/Users/luca/Laputa/book/designing-data-intensive-applications.md': `---
+title: Designing Data-Intensive Applications
+is_a: Book
+author: Martin Kleppmann
+status: Finished
+rating: 5
+---
+
+# Designing Data-Intensive Applications
+
+Essential reading for anyone building distributed systems. Covers replication, partitioning, transactions, and stream processing.
+`,
 }
 
 const MOCK_ENTRIES: VaultEntry[] = [
@@ -1014,6 +1073,80 @@ const MOCK_ENTRIES: VaultEntry[] = [
     fileSize: 190,
     snippet: 'A general-purpose document — research notes, meeting notes, strategy docs.',
     relationships: {},
+  },
+  // --- Custom type documents (user-created types) ---
+  {
+    path: '/Users/luca/Laputa/type/recipe.md',
+    filename: 'recipe.md',
+    title: 'Recipe',
+    isA: 'Type',
+    aliases: [],
+    belongsTo: [],
+    relatedTo: [],
+    status: null,
+    owner: null,
+    cadence: null,
+    modifiedAt: Date.now() / 1000 - 86400 * 30,
+    createdAt: null,
+    fileSize: 250,
+    snippet: 'A recipe for cooking or baking. Recipes have ingredients, steps, and serving info.',
+    relationships: {},
+  },
+  {
+    path: '/Users/luca/Laputa/type/book.md',
+    filename: 'book.md',
+    title: 'Book',
+    isA: 'Type',
+    aliases: [],
+    belongsTo: [],
+    relatedTo: [],
+    status: null,
+    owner: null,
+    cadence: null,
+    modifiedAt: Date.now() / 1000 - 86400 * 30,
+    createdAt: null,
+    fileSize: 220,
+    snippet: 'A book you\'re reading or have read. Track reading progress, notes, and key takeaways.',
+    relationships: {},
+  },
+  // --- Instances of custom types ---
+  {
+    path: '/Users/luca/Laputa/recipe/pasta-carbonara.md',
+    filename: 'pasta-carbonara.md',
+    title: 'Pasta Carbonara',
+    isA: 'Recipe',
+    aliases: [],
+    belongsTo: [],
+    relatedTo: [],
+    status: null,
+    owner: null,
+    cadence: null,
+    modifiedAt: Date.now() / 1000 - 86400 * 5,
+    createdAt: null,
+    fileSize: 420,
+    snippet: 'Classic Roman pasta dish with eggs, pecorino, guanciale, and black pepper.',
+    relationships: {
+      'Type': ['[[type/recipe]]'],
+    },
+  },
+  {
+    path: '/Users/luca/Laputa/book/designing-data-intensive-applications.md',
+    filename: 'designing-data-intensive-applications.md',
+    title: 'Designing Data-Intensive Applications',
+    isA: 'Book',
+    aliases: [],
+    belongsTo: [],
+    relatedTo: [],
+    status: null,
+    owner: null,
+    cadence: null,
+    modifiedAt: Date.now() / 1000 - 86400 * 14,
+    createdAt: null,
+    fileSize: 380,
+    snippet: 'Essential reading for anyone building distributed systems. Covers replication, partitioning, transactions.',
+    relationships: {
+      'Type': ['[[type/book]]'],
+    },
   },
 ]
 

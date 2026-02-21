@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { NoteList } from './components/NoteList'
 import { Editor } from './components/Editor'
 import { ResizeHandle } from './components/ResizeHandle'
-import { CreateNoteDialog, type NoteType } from './components/CreateNoteDialog'
+import { CreateNoteDialog } from './components/CreateNoteDialog'
+import { CreateTypeDialog } from './components/CreateTypeDialog'
 import { QuickOpenPalette } from './components/QuickOpenPalette'
 import { Toast } from './components/Toast'
 import { CommitDialog } from './components/CommitDialog'
@@ -29,6 +30,12 @@ const VAULTS = [
   { label: 'Demo', path: '/Users/luca/Workspace/laputa-app/demo-vault' },
 ]
 
+const BUILT_IN_TYPE_NAMES = new Set([
+  'Project', 'Experiment', 'Responsibility', 'Procedure',
+  'Person', 'Event', 'Topic', 'Type', 'Note', 'Essay',
+  'Quarter', 'Journal', 'Evergreen',
+])
+
 function App() {
   const [selection, setSelection] = useState<SidebarSelection>(DEFAULT_SELECTION)
   const [sidebarWidth, setSidebarWidth] = useState(250)
@@ -37,7 +44,8 @@ function App() {
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false)
   const [gitHistory, setGitHistory] = useState<GitCommit[]>([])
   const [showCreateDialog, setShowCreateDialog] = useState(false)
-  const [createNoteDefaultType, setCreateNoteDefaultType] = useState<NoteType | undefined>()
+  const [createNoteDefaultType, setCreateNoteDefaultType] = useState<string | undefined>()
+  const [showCreateTypeDialog, setShowCreateTypeDialog] = useState(false)
   const [showQuickOpen, setShowQuickOpen] = useState(false)
   const [showCommitDialog, setShowCommitDialog] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -46,6 +54,15 @@ function App() {
 
   const vault = useVaultLoader(vaultPath)
   const notes = useNoteActions(vault.addEntry, vault.updateContent, vault.entries, setToastMessage)
+
+  // Derive custom types from vault (Type entries not in built-in list)
+  const customTypes = useMemo(
+    () => vault.entries
+      .filter((e) => e.isA === 'Type' && !BUILT_IN_TYPE_NAMES.has(e.title))
+      .map((e) => e.title)
+      .sort(),
+    [vault.entries],
+  )
 
   // Reset UI state when vault changes
   const handleSwitchVault = useCallback((path: string) => {
@@ -65,9 +82,18 @@ function App() {
   }, [notes.activeTabPath, vault.loadGitHistory])
 
   const openCreateDialog = useCallback((type?: string) => {
-    setCreateNoteDefaultType(type as NoteType | undefined)
+    setCreateNoteDefaultType(type)
     setShowCreateDialog(true)
   }, [])
+
+  const openCreateTypeDialog = useCallback(() => {
+    setShowCreateTypeDialog(true)
+  }, [])
+
+  const handleCreateType = useCallback((name: string) => {
+    notes.handleCreateType(name)
+    setToastMessage(`Type "${name}" created`)
+  }, [notes, setToastMessage])
 
   useAppKeyboard({
     onQuickOpen: () => setShowQuickOpen(true),
@@ -107,7 +133,7 @@ function App() {
     <div className="app-shell">
       <div className="app">
         <div className="app__sidebar" style={{ width: sidebarWidth }}>
-          <Sidebar entries={vault.entries} selection={selection} onSelect={setSelection} onSelectNote={notes.handleSelectNote} onCreateType={openCreateDialog} modifiedCount={vault.modifiedFiles.length} onCommitPush={() => setShowCommitDialog(true)} />
+          <Sidebar entries={vault.entries} selection={selection} onSelect={setSelection} onSelectNote={notes.handleSelectNote} onCreateType={openCreateDialog} onCreateNewType={openCreateTypeDialog} modifiedCount={vault.modifiedFiles.length} onCommitPush={() => setShowCommitDialog(true)} />
         </div>
         <ResizeHandle onResize={handleSidebarResize} />
         <div className="app__note-list" style={{ width: noteListWidth }}>
@@ -154,6 +180,12 @@ function App() {
         onClose={() => setShowCreateDialog(false)}
         onCreate={notes.handleCreateNote}
         defaultType={createNoteDefaultType}
+        customTypes={customTypes}
+      />
+      <CreateTypeDialog
+        open={showCreateTypeDialog}
+        onClose={() => setShowCreateTypeDialog(false)}
+        onCreate={handleCreateType}
       />
       <CommitDialog
         open={showCommitDialog}

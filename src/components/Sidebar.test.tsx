@@ -239,7 +239,7 @@ describe('Sidebar', () => {
     const onCreateType = vi.fn()
     render(<Sidebar entries={mockEntries} selection={defaultSelection} onSelect={() => {}} onCreateType={onCreateType} />)
     const createButtons = screen.getAllByTitle(/^New /)
-    expect(createButtons.length).toBe(7) // Projects, Experiments, Responsibilities, Procedures, People, Events, Topics
+    expect(createButtons.length).toBe(8) // Projects, Experiments, Responsibilities, Procedures, People, Events, Topics, Types
   })
 
   it('calls onCreateType with correct type when + button is clicked', () => {
@@ -262,5 +262,111 @@ describe('Sidebar', () => {
   it('shows badge on commit button when modified files exist', () => {
     render(<Sidebar entries={[]} selection={defaultSelection} onSelect={() => {}} modifiedCount={3} onCommitPush={() => {}} />)
     expect(screen.getByText('3')).toBeInTheDocument()
+  })
+
+  describe('dynamic custom type sections', () => {
+    const entriesWithCustomTypes: VaultEntry[] = [
+      ...mockEntries,
+      {
+        path: '/vault/type/recipe.md',
+        filename: 'recipe.md',
+        title: 'Recipe',
+        isA: 'Type',
+        aliases: [],
+        belongsTo: [],
+        relatedTo: [],
+        status: null,
+        owner: null,
+        cadence: null,
+        modifiedAt: 1700000000,
+        createdAt: null,
+        fileSize: 200,
+        snippet: '',
+        relationships: {},
+      },
+      {
+        path: '/vault/type/book.md',
+        filename: 'book.md',
+        title: 'Book',
+        isA: 'Type',
+        aliases: [],
+        belongsTo: [],
+        relatedTo: [],
+        status: null,
+        owner: null,
+        cadence: null,
+        modifiedAt: 1700000000,
+        createdAt: null,
+        fileSize: 200,
+        snippet: '',
+        relationships: {},
+      },
+      {
+        path: '/vault/recipe/pasta.md',
+        filename: 'pasta.md',
+        title: 'Pasta Carbonara',
+        isA: 'Recipe',
+        aliases: [],
+        belongsTo: [],
+        relatedTo: [],
+        status: null,
+        owner: null,
+        cadence: null,
+        modifiedAt: 1700000000,
+        createdAt: null,
+        fileSize: 300,
+        snippet: '',
+        relationships: {},
+      },
+    ]
+
+    it('renders custom type sections derived from Type entries', () => {
+      render(<Sidebar entries={entriesWithCustomTypes} selection={defaultSelection} onSelect={() => {}} onCreateType={() => {}} />)
+      expect(screen.getByText('Books')).toBeInTheDocument()
+      expect(screen.getByText('Recipes')).toBeInTheDocument()
+    })
+
+    it('shows instances of custom types under their section', () => {
+      render(<Sidebar entries={entriesWithCustomTypes} selection={defaultSelection} onSelect={() => {}} onCreateType={() => {}} />)
+      expect(screen.getByText('Pasta Carbonara')).toBeInTheDocument()
+    })
+
+    it('renders + button on custom type sections for creating instances', () => {
+      const onCreateType = vi.fn()
+      render(<Sidebar entries={entriesWithCustomTypes} selection={defaultSelection} onSelect={() => {}} onCreateType={onCreateType} />)
+      fireEvent.click(screen.getByTitle('New Recipe'))
+      expect(onCreateType).toHaveBeenCalledWith('Recipe')
+    })
+
+    it('calls onCreateNewType when + is clicked on Types section', () => {
+      const onCreateNewType = vi.fn()
+      render(<Sidebar entries={entriesWithCustomTypes} selection={defaultSelection} onSelect={() => {}} onCreateNewType={onCreateNewType} />)
+      fireEvent.click(screen.getByTitle('New Type'))
+      expect(onCreateNewType).toHaveBeenCalled()
+    })
+
+    it('does not show built-in types as custom sections', () => {
+      const projectTypeEntry: VaultEntry = {
+        path: '/vault/type/project.md',
+        filename: 'project.md',
+        title: 'Project',
+        isA: 'Type',
+        aliases: [],
+        belongsTo: [],
+        relatedTo: [],
+        status: null,
+        owner: null,
+        cadence: null,
+        modifiedAt: 1700000000,
+        createdAt: null,
+        fileSize: 200,
+        snippet: '',
+        relationships: {},
+      }
+      render(<Sidebar entries={[...mockEntries, projectTypeEntry]} selection={defaultSelection} onSelect={() => {}} />)
+      // "Projects" should appear once (the built-in section), not twice
+      const projectLabels = screen.getAllByText('Projects')
+      expect(projectLabels.length).toBe(1)
+    })
   })
 })
