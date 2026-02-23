@@ -190,6 +190,8 @@ mod tests {
         assert!(result.is_ok());
     }
 
+} // close mod tests
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
