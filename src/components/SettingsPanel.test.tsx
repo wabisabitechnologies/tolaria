@@ -291,5 +291,56 @@ describe('SettingsPanel', () => {
       )
       expect(screen.getByText(/Connect your GitHub account/)).toBeInTheDocument()
     })
+
+    it('displays the actual backend error string when device flow start fails', async () => {
+      mockInvokeFn.mockImplementation(async (cmd: string) => {
+        if (cmd === 'github_device_flow_start') {
+          // Tauri invoke rejects with a plain string, not an Error instance
+          throw 'GitHub device flow not available. Ensure a GitHub App is registered.'
+        }
+        return null
+      })
+
+      render(
+        <SettingsPanel open={true} settings={emptySettings} onSave={onSave} onClose={onClose} />
+      )
+
+      fireEvent.click(screen.getByTestId('github-login'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('github-error')).toHaveTextContent(
+          'GitHub device flow not available. Ensure a GitHub App is registered.'
+        )
+      })
+    })
+
+    it('prevents double-click by disabling button during login flow', async () => {
+      let resolveStart: ((v: unknown) => void) | null = null
+      mockInvokeFn.mockImplementation(async (cmd: string) => {
+        if (cmd === 'github_device_flow_start') {
+          return new Promise(r => { resolveStart = r })
+        }
+        return null
+      })
+
+      render(
+        <SettingsPanel open={true} settings={emptySettings} onSave={onSave} onClose={onClose} />
+      )
+
+      const loginBtn = screen.getByTestId('github-login') as HTMLButtonElement
+      fireEvent.click(loginBtn)
+
+      // Button should be disabled while waiting
+      await waitFor(() => {
+        expect(loginBtn.disabled).toBe(true)
+      })
+
+      // Clean up
+      resolveStart?.({
+        device_code: 'dc', user_code: 'UC-1234',
+        verification_uri: 'https://github.com/login/device',
+        expires_in: 900, interval: 5,
+      })
+    })
   })
 })
